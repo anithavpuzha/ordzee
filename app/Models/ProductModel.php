@@ -18,9 +18,6 @@ class ProductModel extends Model
     protected $allowedFields = [
         'business_id',
         'product_name',
-        'description',
-        'unit',
-        'default_price',
         'is_active',
     ];
 }

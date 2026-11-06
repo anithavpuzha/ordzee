@@ -27,3 +27,15 @@ $routes->group('daily-menu', ['filter' => 'session'], static function ($routes) 
     $routes->get('create', 'DailyMenu::create');
     $routes->post('create', 'DailyMenu::store');
 });
+
+// Products routes
+$routes->group('products', ['filter' => 'session'], static function ($routes) {
+    $routes->get('/', 'Products::index');
+    $routes->get('create', 'Products::create');
+    $routes->post('create', 'Products::store');
+
+    $routes->get('edit/(:num)', 'Products::edit/$1');
+    $routes->post('update/(:num)', 'Products::update/$1');
+
+    $routes->post('toggle-status/(:num)', 'Products::toggleStatus/$1');
+});
