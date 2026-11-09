@@ -25,15 +25,38 @@ class Orders extends BaseController
 
         $orderModel = new OrderModel();
 
-        $orders = $orderModel
-            ->where('business_id', $business['id'])
+        // Get the selected order status from the URL.
+        $status = trim((string) $this->request->getGet('status'));
+
+        // Allow only these status filters.
+        $allowedStatuses = [
+            'pending',
+            'accepted',
+            'preparing',
+            'ready',
+            'delivered',
+            'rejected',
+        ];
+
+        $query = $orderModel
+            ->where('business_id', $business['id']);
+
+        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
+            $query->where('order_status', $status);
+        } else {
+            $status = '';
+        }
+
+        $orders = $query
             ->orderBy('order_date', 'DESC')
-            ->findAll();
+            ->paginate(20);
 
         return view('orders/index', [
             'pageTitle' => 'Orders',
             'business'  => $business,
             'orders'    => $orders,
+            'status'    => $status,
+            'pager'     => $orderModel->pager,
         ]);
     }
 
