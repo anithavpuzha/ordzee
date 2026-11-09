@@ -33,6 +33,15 @@ $routes->group('daily-menu', ['filter' => 'session'], static function ($routes) 
     $routes->post('delete-item/(:num)', 'DailyMenu::deleteItem/$1');
 });
 
+// Orders routes
+$routes->group('orders', ['filter' => 'session'], static function ($routes) {
+    $routes->get('/', 'Orders::index');
+    $routes->get('view/(:num)', 'Orders::view/$1');
+    $routes->post('accept/(:num)', 'Orders::accept/$1');
+    $routes->post('reject/(:num)', 'Orders::reject/$1');
+    $routes->post('deliver/(:num)', 'Orders::deliver/$1');
+});
+
 // Products routes
 $routes->group('products', ['filter' => 'session'], static function ($routes) {
     $routes->get('/', 'Products::index');

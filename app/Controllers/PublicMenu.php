@@ -57,6 +57,7 @@ class PublicMenu extends BaseController
         ]);
     }
 
+
     public function placeOrder($slug)
     {
         // Find the active business.
@@ -218,18 +219,19 @@ class PublicMenu extends BaseController
         $orderNumber = 'ORD-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
 
         // Prepare the WhatsApp message without prices or totals.
-        $message = "Hello, I would like to place an order from "
-            . $business['business_name'] . ".\n\n";
+        $message =
+            "Hello, I would like to place an order from " .
+            $business['business_name'] . ". My order: ";
 
-        $message .= "My order:\n";
+        $messageItems = [];
 
         foreach ($orderItems as $item) {
-            $message .= "- "
-                . $item['product_name']
+            $messageItems[] = $item['product_name']
                 . " (" . $item['unit'] . ")"
-                . " x " . $item['quantity']
-                . "\n";
+                . " x " . $item['quantity'];
         }
+
+        $message .= implode(', ', $messageItems);
 
         // Remove non-digit characters from the business WhatsApp number.
         $whatsappNumber = preg_replace(
@@ -255,25 +257,25 @@ class PublicMenu extends BaseController
             $orderModel = new OrderModel();
 
             $orderId = $orderModel->insert([
-                'business_id'       => $business['id'],
-                'customer_id'       => null,
-                'order_number'      => $orderNumber,
-                'customer_name'     => $customerName,
-                'customer_mobile'   => $customerMobile,
-                'customer_email'    => $customerEmail ?: null,
-                'delivery_address'  => $deliveryAddress,
-                'order_date'        => date('Y-m-d H:i:s'),
-                'delivery_date'     => null,
-                'subtotal'          => $subtotal,
-                'discount'          => $discount,
-                'delivery_charge'   => $deliveryCharge,
-                'grand_total'       => $grandTotal,
-                'amount_paid'       => 0,
-                'balance_amount'    => $grandTotal,
-                'order_status'      => 'pending',
-                'payment_status'    => 'pending',
+                'business_id'         => $business['id'],
+                'customer_id'         => null,
+                'order_number'        => $orderNumber,
+                'customer_name'       => $customerName,
+                'customer_mobile'     => $customerMobile,
+                'customer_email'      => $customerEmail ?: null,
+                'delivery_address'    => $deliveryAddress,
+                'order_date'          => date('Y-m-d H:i:s'),
+                'delivery_date'       => null,
+                'subtotal'            => $subtotal,
+                'discount'            => $discount,
+                'delivery_charge'     => $deliveryCharge,
+                'grand_total'         => $grandTotal,
+                'amount_paid'         => 0,
+                'balance_amount'      => $grandTotal,
+                'order_status'        => 'pending',
+                'payment_status'      => 'pending',
                 'cancellation_reason' => null,
-                'seller_notes'      => null,
+                'seller_notes'        => null,
             ]);
 
             if (! $orderId) {
@@ -311,7 +313,6 @@ class PublicMenu extends BaseController
             }
 
             $db->transCommit();
-
         } catch (\Throwable $e) {
 
             $db->transRollback();

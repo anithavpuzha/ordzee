@@ -35,5 +35,6 @@ class OrderModel extends Model
         'payment_status',
         'cancellation_reason',
         'seller_notes',
+        'customer_message',
     ];
 }
