@@ -17,7 +17,6 @@ class DailyMenuModel extends Model
 
     protected $allowedFields = [
         'business_id',
-        'menu_date',
         'menu_title',
         'status',
     ];

@@ -36,10 +36,10 @@
                         <strong class="small">Your Public Menu Link:</strong>
                         <br>
 
-                        <a href="<?= site_url($business['slug']) ?>"
+                        <a href="<?= site_url('menu/' . $business['slug']) ?>"
                            target="_blank"
                            rel="noopener noreferrer">
-                            <?= esc(site_url($business['slug'])) ?>
+                            <?= esc(site_url('menu/' . $business['slug'])) ?>
                         </a>
                     </div>
 
