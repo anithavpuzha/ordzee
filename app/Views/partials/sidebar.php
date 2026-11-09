@@ -36,7 +36,7 @@ $activePage = $activePage ?? 'dashboard';
             <span class="nav-icon">▣</span> Customer Orders
         </a>
 
-        <a class="nav-link <?= $activePage === 'preparation' ? 'active' : '' ?>"
+    <!--    <a class="nav-link <?= $activePage === 'preparation' ? 'active' : '' ?>"
            href="<?= site_url('preparation') ?>">
             <span class="nav-icon">◷</span> Preparation
         </a>
@@ -44,7 +44,7 @@ $activePage = $activePage ?? 'dashboard';
         <a class="nav-link <?= $activePage === 'delivery' ? 'active' : '' ?>"
            href="<?= site_url('delivery') ?>">
             <span class="nav-icon">↗</span> Delivery
-        </a>
+        </a> -->
 
         <a class="nav-link <?= $activePage === 'payments' ? 'active' : '' ?>"
            href="<?= site_url('payments') ?>">

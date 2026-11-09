@@ -25,10 +25,19 @@ class Orders extends BaseController
 
         $orderModel = new OrderModel();
 
-        // Get the selected order status from the URL.
+        // Get filters.
         $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
-        // Allow only these status filters.
+        $dateFilter = trim((string) $this->request->getGet('date_filter'));
+        $fromDate = trim((string) $this->request->getGet('from_date'));
+        $toDate = trim((string) $this->request->getGet('to_date'));
+
+        $paymentStatus = trim((string) $this->request->getGet('payment_status'));
+
+        $dateError = '';
+
+        // Validate order status.
         $allowedStatuses = [
             'pending',
             'accepted',
@@ -38,25 +47,170 @@ class Orders extends BaseController
             'rejected',
         ];
 
-        $query = $orderModel
-            ->where('business_id', $business['id']);
-
-        if ($status !== '' && in_array($status, $allowedStatuses, true)) {
-            $query->where('order_status', $status);
-        } else {
+        if (! in_array($status, $allowedStatuses, true)) {
             $status = '';
         }
 
+        // Validate date filter.
+        $allowedDateFilters = [
+            '',
+            'today',
+            'yesterday',
+            'last7',
+            'last30',
+            'custom',
+        ];
+
+        if (! in_array($dateFilter, $allowedDateFilters, true)) {
+            $dateFilter = '';
+        }
+
+        // Validate payment status.
+        $allowedPaymentStatuses = [
+            'pending',
+            'partial',
+            'paid',
+            'refunded',
+        ];
+
+        if (! in_array($paymentStatus, $allowedPaymentStatuses, true)) {
+            $paymentStatus = '';
+        }
+
+        // Get order summary counts.
+        // These counts are independent of all filters.
+        $db = \Config\Database::connect();
+
+        $orderCounts = $db->table('orders')
+            ->select("
+            COUNT(*) AS total_orders,
+            COALESCE(SUM(CASE WHEN order_status = 'pending' THEN 1 ELSE 0 END), 0) AS pending_orders,
+            COALESCE(SUM(CASE WHEN order_status = 'accepted' THEN 1 ELSE 0 END), 0) AS accepted_orders,
+            COALESCE(SUM(CASE WHEN order_status = 'delivered' THEN 1 ELSE 0 END), 0) AS delivered_orders,
+            COALESCE(SUM(CASE WHEN order_status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected_orders
+        ", false)
+            ->where('business_id', $business['id'])
+            ->get()
+            ->getRowArray();
+
+        // Prepare date boundaries.
+        $startDate = null;
+        $endDateExclusive = null;
+
+        $today = new \DateTimeImmutable('today');
+
+        switch ($dateFilter) {
+
+            case 'today':
+
+                $startDate = $today;
+                $endDateExclusive = $today->modify('+1 day');
+
+                break;
+
+            case 'yesterday':
+
+                $startDate = $today->modify('-1 day');
+                $endDateExclusive = $today;
+
+                break;
+
+            case 'last7':
+
+                $startDate = $today->modify('-6 days');
+                $endDateExclusive = $today->modify('+1 day');
+
+                break;
+
+            case 'last30':
+
+                $startDate = $today->modify('-29 days');
+                $endDateExclusive = $today->modify('+1 day');
+
+                break;
+
+            case 'custom':
+
+                $fromDateObject = \DateTimeImmutable::createFromFormat('!Y-m-d', $fromDate);
+
+                $toDateObject = \DateTimeImmutable::createFromFormat('!Y-m-d', $toDate);
+
+                if (
+                    ! $fromDateObject ||
+                    $fromDateObject->format('Y-m-d') !== $fromDate ||
+                    ! $toDateObject ||
+                    $toDateObject->format('Y-m-d') !== $toDate
+                ) {
+
+                    $dateError = 'Please select valid start and end dates.';
+                } elseif ($fromDateObject > $toDateObject) {
+
+                    $dateError = 'Start date cannot be later than end date.';
+                } else {
+
+                    $startDate = $fromDateObject;
+                    $endDateExclusive = $toDateObject->modify('+1 day');
+                }
+
+                break;
+        }
+
+        // Build orders query for this business.
+        $query = $orderModel
+            ->where('business_id', $business['id']);
+
+        // Apply order status filter.
+        if ($status !== '') {
+            $query->where('order_status', $status);
+        }
+
+        // Apply payment status filter.
+        if ($paymentStatus !== '') {
+            $query->where('payment_status', $paymentStatus);
+        }
+
+        // Apply search filter.
+        if ($search !== '') {
+
+            $query->groupStart()
+                ->like('order_number', $search)
+                ->orLike('customer_name', $search)
+                ->orLike('customer_mobile', $search)
+                ->groupEnd();
+        }
+
+        // Apply date filter.
+        if ($startDate !== null && $endDateExclusive !== null) {
+
+            $query->where(
+                'order_date >=',
+                $startDate->format('Y-m-d 00:00:00')
+            );
+
+            $query->where(
+                'order_date <',
+                $endDateExclusive->format('Y-m-d 00:00:00')
+            );
+        }
+
+        // Get 20 orders per page.
         $orders = $query
             ->orderBy('order_date', 'DESC')
             ->paginate(20);
 
         return view('orders/index', [
-            'pageTitle' => 'Orders',
-            'business'  => $business,
-            'orders'    => $orders,
-            'status'    => $status,
-            'pager'     => $orderModel->pager,
+            'pageTitle'     => 'Orders',
+            'business'      => $business,
+            'orders'        => $orders,
+            'status'        => $status,
+            'search'        => $search,
+            'dateFilter'    => $dateFilter,
+            'fromDate'      => $fromDate,
+            'toDate'        => $toDate,
+            'dateError'     => $dateError,
+            'paymentStatus' => $paymentStatus,
+            'pager'         => $orderModel->pager,
+            'orderCounts'   => $orderCounts,
         ]);
     }
 

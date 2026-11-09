@@ -2,14 +2,287 @@
 
 <?= $this->section('content') ?>
 
-<div class="panel">
+<?php
+$currentOrderStatus = strtolower($order['order_status'] ?? 'pending');
+$currentPaymentStatus = strtolower($order['payment_status'] ?? 'pending');
 
+// Order status badge
+$orderBadgeClass = 'bg-warning text-dark';
+
+if (in_array($currentOrderStatus, ['accepted', 'delivered'], true)) {
+    $orderBadgeClass = 'bg-success';
+} elseif ($currentOrderStatus === 'rejected') {
+    $orderBadgeClass = 'bg-danger';
+} elseif (in_array($currentOrderStatus, ['preparing', 'ready'], true)) {
+    $orderBadgeClass = 'bg-info text-dark';
+}
+
+// Payment status badge
+$paymentBadgeClass = 'bg-warning text-dark';
+
+if ($currentPaymentStatus === 'paid') {
+    $paymentBadgeClass = 'bg-success';
+} elseif ($currentPaymentStatus === 'partial') {
+    $paymentBadgeClass = 'bg-info text-dark';
+} elseif ($currentPaymentStatus === 'refunded') {
+    $paymentBadgeClass = 'bg-secondary';
+}
+
+$itemCount = count($items);
+
+$currency = '₹';
+?>
+
+<style>
+    .order-details-page {
+        --od-border: #e8edf3;
+        --od-muted: #718096;
+        --od-heading: #263445;
+    }
+
+    .order-details-page .section-description {
+        color: var(--od-muted);
+    }
+
+    /* Main order header */
+
+    .order-details-page .order-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding: 20px;
+        margin-top: 22px;
+        background: #f8fafc;
+        border: 1px solid var(--od-border);
+        border-radius: 12px;
+    }
+
+    .order-details-page .order-number {
+        font-size: 21px;
+        font-weight: 700;
+        color: var(--od-heading);
+        overflow-wrap: anywhere;
+    }
+
+    .order-details-page .order-date {
+        color: var(--od-muted);
+        font-size: 13px;
+        margin-top: 5px;
+    }
+
+    .order-details-page .status-label {
+        font-size: 11px;
+        color: var(--od-muted);
+        margin-bottom: 6px;
+        font-weight: 600;
+    }
+
+    .order-details-page .status-badge {
+        display: inline-block;
+        border-radius: 20px;
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    /* Action area */
+
+    .order-details-page .action-panel {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 9px;
+        margin-top: 16px;
+    }
+
+    .order-details-page .action-panel .btn {
+        font-weight: 600;
+        border-radius: 7px;
+    }
+
+    /* Detail sections */
+
+    .order-details-page .detail-section {
+        background: #fff;
+        border: 1px solid var(--od-border);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .order-details-page .detail-heading {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--od-heading);
+        margin-bottom: 17px;
+    }
+
+    .order-details-page .detail-heading i {
+        color: var(--od-muted);
+        font-size: 17px;
+    }
+
+    /* Customer information cards */
+
+    .order-details-page .info-card {
+        height: 100%;
+        padding: 14px;
+        border: 1px solid var(--od-border);
+        border-radius: 9px;
+        background: #fff;
+    }
+
+    .order-details-page .info-label {
+        font-size: 12px;
+        color: var(--od-muted);
+        margin-bottom: 6px;
+        font-weight: 500;
+    }
+
+    .order-details-page .info-value {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--od-heading);
+        overflow-wrap: anywhere;
+    }
+
+    .order-details-page .address-card {
+        background: #f8fafc;
+    }
+
+    /* Ordered items table */
+
+    .order-details-page .items-table {
+        margin-bottom: 0;
+    }
+
+    .order-details-page .items-table thead th {
+        background: #f8fafc;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+        padding: 13px 12px;
+        border-color: var(--od-border);
+    }
+
+    .order-details-page .items-table tbody td {
+        padding: 13px 12px;
+        vertical-align: middle;
+        border-color: var(--od-border);
+        font-size: 13px;
+    }
+
+    .order-details-page .product-name {
+        font-weight: 650;
+        color: var(--od-heading);
+    }
+
+    .order-details-page .price-cell {
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Summary */
+
+    .order-details-page .summary-table {
+        margin-bottom: 0;
+    }
+
+    .order-details-page .summary-table th,
+    .order-details-page .summary-table td {
+        padding: 12px 14px;
+        border-color: var(--od-border);
+    }
+
+    .order-details-page .summary-table th {
+        font-weight: 500;
+        color: #526071;
+    }
+
+    .order-details-page .summary-table td {
+        text-align: right;
+        font-weight: 550;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .order-details-page .grand-total-row th,
+    .order-details-page .grand-total-row td {
+        background: #f8fafc;
+        font-size: 16px;
+        font-weight: 750;
+        color: var(--od-heading);
+    }
+
+    .order-details-page .balance-row th,
+    .order-details-page .balance-row td {
+        font-weight: 750;
+    }
+
+    .order-details-page .empty-items {
+        padding: 25px;
+        text-align: center;
+        color: var(--od-muted);
+    }
+
+    /* Modals */
+
+    .order-details-page .modal-content {
+        border-radius: 12px;
+        border: 0;
+    }
+
+    .order-details-page .modal-header,
+    .order-details-page .modal-footer {
+        border-color: var(--od-border);
+    }
+
+    @media (max-width: 576px) {
+        .order-details-page .order-header {
+            padding: 15px;
+        }
+
+        .order-details-page .order-number {
+            font-size: 18px;
+        }
+
+        .order-details-page .detail-section {
+            padding: 14px;
+        }
+
+        .order-details-page .action-panel {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .order-details-page .action-panel .btn {
+            width: 100%;
+        }
+
+        .order-details-page .items-table thead th,
+        .order-details-page .items-table tbody td {
+            padding: 10px 9px;
+        }
+    }
+</style>
+
+<div class="panel order-details-page">
+
+    <!-- Page Heading -->
     <div class="section-title">Order Details</div>
 
     <div class="section-description">
-        Complete information about this customer order.
+        View customer information, ordered items and payment details.
     </div>
 
+    <!-- Flash Messages -->
     <?php if (session()->getFlashdata('success')): ?>
         <div class="alert alert-success mt-3">
             <?= esc(session()->getFlashdata('success')) ?>
@@ -22,14 +295,15 @@
         </div>
     <?php endif; ?>
 
-    <!-- Order Action Buttons -->
-    <div class="mt-3 mb-3 d-flex flex-column align-items-start gap-2">
+    <!-- Order Actions -->
+    <div class="action-panel">
 
         <a href="<?= site_url('orders') ?>" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>
             Back to Orders
         </a>
 
-        <?php if (in_array($order['order_status'], ['accepted', 'preparing', 'ready'], true)): ?>
+        <?php if (in_array($currentOrderStatus, ['accepted', 'preparing', 'ready'], true)): ?>
 
             <form method="post"
                 action="<?= site_url('orders/deliver/' . $order['id']) ?>"
@@ -38,6 +312,7 @@
                 <?= csrf_field() ?>
 
                 <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle me-1"></i>
                     Mark as Delivered
                 </button>
 
@@ -45,22 +320,80 @@
 
         <?php endif; ?>
 
+        <?php if ($currentOrderStatus === 'pending'): ?>
+
+            <button type="button"
+                class="btn btn-success"
+                data-bs-toggle="modal"
+                data-bs-target="#acceptOrderModal">
+
+                <i class="bi bi-check-lg me-1"></i>
+                Accept Order
+
+            </button>
+
+            <button type="button"
+                class="btn btn-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#rejectOrderModal">
+
+                <i class="bi bi-x-lg me-1"></i>
+                Reject Order
+
+            </button>
+
+        <?php endif; ?>
+
     </div>
 
-    <!-- Accept Order -->
-    <?php if ($order['order_status'] === 'pending'): ?>
 
-        <button type="button"
-            class="btn btn-success mb-3"
-            data-bs-toggle="modal"
-            data-bs-target="#acceptOrderModal">
-            Accept Order
-        </button>
+
+    <!-- Order Overview -->
+    <div class="order-header">
+
+        <div>
+            <div class="status-label">ORDER NUMBER</div>
+
+            <div class="order-number">
+                <?= esc($order['order_number']) ?>
+            </div>
+
+            <div class="order-date">
+                <i class="bi bi-calendar3 me-1"></i>
+                <?= esc($order['order_date']) ?>
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-3">
+
+            <div>
+                <div class="status-label">ORDER STATUS</div>
+
+                <span class="status-badge <?= $orderBadgeClass ?>">
+                    <?= esc(ucfirst($currentOrderStatus)) ?>
+                </span>
+            </div>
+
+            <div>
+                <div class="status-label">PAYMENT STATUS</div>
+
+                <span class="status-badge <?= $paymentBadgeClass ?>">
+                    <?= esc(ucfirst($currentPaymentStatus)) ?>
+                </span>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Accept Order Modal -->
+    <?php if ($currentOrderStatus === 'pending'): ?>
 
         <div class="modal fade" id="acceptOrderModal" tabindex="-1"
             aria-labelledby="acceptOrderModalLabel" aria-hidden="true">
 
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-dialog-centered">
+
                 <div class="modal-content">
 
                     <form method="post"
@@ -69,17 +402,22 @@
                         <?= csrf_field() ?>
 
                         <div class="modal-header">
+
                             <h5 class="modal-title" id="acceptOrderModalLabel">
                                 Accept Order
                             </h5>
 
                             <button type="button" class="btn-close"
-                                data-bs-dismiss="modal"></button>
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+
                         </div>
 
                         <div class="modal-body">
 
-                            <p>Are you sure you want to accept this order?</p>
+                            <p>
+                                Are you sure you want to accept this order?
+                            </p>
 
                             <label class="form-label fw-bold">
                                 Message to Customer *
@@ -92,6 +430,10 @@
                                 maxlength="2000"
                                 required
                                 placeholder="Example: Your order will be delivered today. Thank you for ordering with us!"></textarea>
+
+                            <small class="text-muted">
+                                This message will be prepared for sending through WhatsApp.
+                            </small>
 
                         </div>
 
@@ -111,26 +453,18 @@
                     </form>
 
                 </div>
+
             </div>
 
         </div>
 
-    <?php endif; ?>
 
-    <!-- Reject Order -->
-    <?php if ($order['order_status'] === 'pending'): ?>
-
-        <button type="button"
-            class="btn btn-danger mb-3 ms-2"
-            data-bs-toggle="modal"
-            data-bs-target="#rejectOrderModal">
-            Reject Order
-        </button>
-
+        <!-- Reject Order Modal -->
         <div class="modal fade" id="rejectOrderModal" tabindex="-1"
             aria-labelledby="rejectOrderModalLabel" aria-hidden="true">
 
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-dialog-centered">
+
                 <div class="modal-content">
 
                     <form method="post"
@@ -139,17 +473,22 @@
                         <?= csrf_field() ?>
 
                         <div class="modal-header">
+
                             <h5 class="modal-title" id="rejectOrderModalLabel">
                                 Reject Order
                             </h5>
 
                             <button type="button" class="btn-close"
-                                data-bs-dismiss="modal"></button>
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+
                         </div>
 
                         <div class="modal-body">
 
-                            <p>Are you sure you want to reject this order?</p>
+                            <p>
+                                Are you sure you want to reject this order?
+                            </p>
 
                             <label class="form-label fw-bold">
                                 Rejection Reason / Message to Customer *
@@ -181,170 +520,233 @@
                     </form>
 
                 </div>
+
             </div>
 
         </div>
 
     <?php endif; ?>
 
-    <!-- Order Information -->
-    <h5 class="mt-4">Order Information</h5>
-
-    <div class="table-responsive">
-        <table class="table table-bordered">
-
-            <tr>
-                <th>Order Number</th>
-                <td><?= esc($order['order_number']) ?></td>
-            </tr>
-
-            <tr>
-                <th>Order Date</th>
-                <td><?= esc($order['order_date']) ?></td>
-            </tr>
-
-            <tr>
-                <th>Order Status</th>
-                <td>
-                    <span class="badge <?=
-                        in_array(strtolower($order['order_status']), ['accepted', 'delivered'], true)
-                            ? 'bg-success'
-                            : ($order['order_status'] === 'rejected'
-                                ? 'bg-danger'
-                                : 'bg-warning text-dark')
-                    ?>">
-                        <?= esc(ucfirst($order['order_status'])) ?>
-                    </span>
-                </td>
-            </tr>
-
-            <tr>
-                <th>Payment Status</th>
-                <td><?= esc(ucfirst($order['payment_status'])) ?></td>
-            </tr>
-
-        </table>
-    </div>
 
     <!-- Customer Information -->
-    <h5 class="mt-4">Customer Information</h5>
+    <div class="detail-section">
 
-    <div class="table-responsive">
-        <table class="table table-bordered">
+        <div class="detail-heading">
+            <i class="bi bi-person"></i>
+            Customer Information
+        </div>
 
-            <tr>
-                <th>Customer Name</th>
-                <td><?= esc($order['customer_name']) ?></td>
-            </tr>
+        <div class="row g-3">
 
-            <tr>
-                <th>Mobile Number</th>
-                <td><?= esc($order['customer_mobile']) ?></td>
-            </tr>
+            <div class="col-md-6">
+                <div class="info-card">
 
-            <tr>
-                <th>Email</th>
-                <td><?= esc($order['customer_email'] ?? 'Not provided') ?></td>
-            </tr>
+                    <div class="info-label">Customer Name</div>
 
-            <tr>
-                <th>Delivery Address</th>
-                <td><?= nl2br(esc($order['delivery_address'])) ?></td>
-            </tr>
+                    <div class="info-value">
+                        <?= esc($order['customer_name']) ?>
+                    </div>
 
-        </table>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="info-card">
+
+                    <div class="info-label">Mobile Number</div>
+
+                    <div class="info-value">
+                        <?= esc($order['customer_mobile']) ?>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="info-card">
+
+                    <div class="info-label">Email Address</div>
+
+                    <div class="info-value">
+                        <?= esc($order['customer_email'] ?: 'Not provided') ?>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="info-card address-card">
+
+                    <div class="info-label">Delivery Address</div>
+
+                    <div class="info-value">
+                        <?= nl2br(esc($order['delivery_address'])) ?>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
     </div>
+
 
     <!-- Ordered Items -->
-    <h5 class="mt-4">Ordered Items</h5>
+    <div class="detail-section">
 
-    <div class="table-responsive">
-        <table class="table table-bordered align-middle">
+        <div class="detail-heading">
+            <i class="bi bi-basket"></i>
+            Ordered Items
 
-            <thead class="table-light">
-                <tr>
-                    <th>Product</th>
-                    <th>Unit</th>
-                    <th>Quantity</th>
-                    <th>Unit Price</th>
-                    <th>Item Total</th>
-                </tr>
-            </thead>
+            <span class="text-muted small fw-normal">
+                (<?= $itemCount ?>)
+            </span>
+        </div>
 
-            <tbody>
+        <div class="table-responsive">
 
-                <?php foreach ($items as $item): ?>
+            <table class="table table-bordered items-table">
 
+                <thead>
                     <tr>
-                        <td><?= esc($item['product_name']) ?></td>
-                        <td><?= esc($item['unit']) ?></td>
-                        <td><?= esc($item['quantity']) ?></td>
-
-                        <td>
-                            ₹<?= number_format((float) $item['unit_price'], 2) ?>
-                        </td>
-
-                        <td>
-                            ₹<?= number_format((float) $item['item_total'], 2) ?>
-                        </td>
+                        <th>Product</th>
+                        <th>Unit</th>
+                        <th class="text-end">Quantity</th>
+                        <th class="text-end">Unit Price</th>
+                        <th class="text-end">Item Total</th>
                     </tr>
+                </thead>
 
-                <?php endforeach; ?>
+                <tbody>
 
-            </tbody>
+                    <?php if (! empty($items)): ?>
 
-        </table>
+                        <?php foreach ($items as $item): ?>
+
+                            <tr>
+
+                                <td>
+                                    <span class="product-name">
+                                        <?= esc($item['product_name']) ?>
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <?= esc($item['unit']) ?>
+                                </td>
+
+                                <td class="text-end">
+                                    <?= esc($item['quantity']) ?>
+                                </td>
+
+                                <td class="text-end price-cell">
+                                    ₹<?= number_format((float) $item['unit_price'], 2) ?>
+                                </td>
+
+                                <td class="text-end price-cell fw-semibold">
+                                    ₹<?= number_format((float) $item['item_total'], 2) ?>
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    <?php else: ?>
+
+                        <tr>
+                            <td colspan="5" class="empty-items">
+                                <i class="bi bi-inbox fs-4 d-block mb-2"></i>
+                                No ordered items found.
+                            </td>
+                        </tr>
+
+                    <?php endif; ?>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
     </div>
 
+
     <!-- Order Summary -->
-    <h5 class="mt-4">Order Summary</h5>
+    <div class="detail-section">
 
-    <div class="table-responsive">
-        <table class="table table-bordered">
+        <div class="detail-heading">
+            <i class="bi bi-calculator"></i>
+            Order Summary
+        </div>
 
-            <tr>
-                <th>Subtotal</th>
-                <td class="text-end">
-                    ₹<?= number_format((float) $order['subtotal'], 2) ?>
-                </td>
-            </tr>
+        <div class="row justify-content-end">
 
-            <tr>
-                <th>Discount</th>
-                <td class="text-end">
-                    ₹<?= number_format((float) $order['discount'], 2) ?>
-                </td>
-            </tr>
+            <div class="col-lg-7 col-md-9">
 
-            <tr>
-                <th>Delivery Charge</th>
-                <td class="text-end">
-                    ₹<?= number_format((float) $order['delivery_charge'], 2) ?>
-                </td>
-            </tr>
+                <div class="table-responsive">
 
-            <tr>
-                <th>Grand Total</th>
-                <td class="text-end fw-bold">
-                    ₹<?= number_format((float) $order['grand_total'], 2) ?>
-                </td>
-            </tr>
+                    <table class="table table-bordered summary-table">
 
-            <tr>
-                <th>Amount Paid</th>
-                <td class="text-end">
-                    ₹<?= number_format((float) $order['amount_paid'], 2) ?>
-                </td>
-            </tr>
+                        <tbody>
 
-            <tr>
-                <th>Balance Amount</th>
-                <td class="text-end">
-                    ₹<?= number_format((float) $order['balance_amount'], 2) ?>
-                </td>
-            </tr>
+                            <tr>
+                                <th>Subtotal</th>
 
-        </table>
+                                <td>
+                                    ₹<?= number_format((float) $order['subtotal'], 2) ?>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Discount</th>
+
+                                <td>
+                                    ₹<?= number_format((float) $order['discount'], 2) ?>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Delivery Charge</th>
+
+                                <td>
+                                    ₹<?= number_format((float) $order['delivery_charge'], 2) ?>
+                                </td>
+                            </tr>
+
+                            <tr class="grand-total-row">
+                                <th>Grand Total</th>
+
+                                <td>
+                                    ₹<?= number_format((float) $order['grand_total'], 2) ?>
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <th>Amount Paid</th>
+
+                                <td>
+                                    ₹<?= number_format((float) $order['amount_paid'], 2) ?>
+                                </td>
+                            </tr>
+
+                            <tr class="balance-row">
+                                <th>Balance Amount</th>
+
+                                <td>
+                                    ₹<?= number_format((float) $order['balance_amount'], 2) ?>
+                                </td>
+                            </tr>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
 
 </div>
