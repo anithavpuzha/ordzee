@@ -46,3 +46,4 @@ $routes->group('products', ['filter' => 'session'], static function ($routes) {
 
 // Public customer menu route
 $routes->get('menu/(:segment)', 'PublicMenu::show/$1');
+$routes->post('menu/(:segment)/place-order', 'PublicMenu::placeOrder/$1');
