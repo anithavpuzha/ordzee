@@ -12,9 +12,11 @@ use CodeIgniter\Exceptions\PageNotFoundException;
 
 class PublicMenu extends BaseController
 {
+    /**
+     * Display the public menu.
+     */
     public function show($slug)
     {
-        // Find the business using its public slug.
         $businessModel = new BusinessModel();
 
         $business = $businessModel
@@ -27,7 +29,6 @@ class PublicMenu extends BaseController
             );
         }
 
-        // Find the business's permanent menu.
         $dailyMenuModel = new DailyMenuModel();
 
         $menu = $dailyMenuModel
@@ -40,7 +41,7 @@ class PublicMenu extends BaseController
             );
         }
 
-        // Get only currently available menu items.
+        // Display only currently available items.
         $dailyMenuItemModel = new DailyMenuItemModel();
 
         $items = $dailyMenuItemModel
@@ -57,7 +58,9 @@ class PublicMenu extends BaseController
         ]);
     }
 
-
+    /**
+     * Validate and place a customer order.
+     */
     public function placeOrder($slug)
     {
         // Find the active business.
@@ -74,42 +77,65 @@ class PublicMenu extends BaseController
         }
 
         // Get customer details.
-        $customerName = trim((string) $this->request->getPost('customer_name'));
-        $customerMobile = trim((string) $this->request->getPost('customer_mobile'));
-        $customerEmail = trim((string) $this->request->getPost('customer_email'));
-        $deliveryAddress = trim((string) $this->request->getPost('delivery_address'));
+        $customerName = trim(
+            (string) $this->request->getPost('customer_name')
+        );
+
+        $customerMobile = trim(
+            (string) $this->request->getPost('customer_mobile')
+        );
+
+        $customerEmail = trim(
+            (string) $this->request->getPost('customer_email')
+        );
+
+        $deliveryAddress = trim(
+            (string) $this->request->getPost('delivery_address')
+        );
 
         // Validate customer details.
         $validation = service('validation');
 
         $validation->setRules([
+
             'customer_name' => [
                 'rules' => 'required|max_length[150]',
                 'errors' => [
                     'required' => 'Please enter your name.',
                 ],
             ],
+
             'customer_mobile' => [
-                'rules' => 'required|max_length[20]',
+                'rules' => 'required|max_length[20]|regex_match[/^[0-9+\-\s()]{7,20}$/]',
                 'errors' => [
                     'required' => 'Please enter your mobile number.',
+                    'regex_match' => 'Please enter a valid mobile number.',
                 ],
             ],
+
             'customer_email' => [
                 'rules' => 'permit_empty|valid_email|max_length[150]',
+                'errors' => [
+                    'valid_email' => 'Please enter a valid email address.',
+                ],
             ],
+
             'delivery_address' => [
-                'rules' => 'required',
+                'rules' => 'required|max_length[2000]',
                 'errors' => [
                     'required' => 'Please enter your delivery address.',
                 ],
             ],
+
         ]);
 
         if (! $validation->withRequest($this->request)->run()) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', implode(' ', $validation->getErrors()));
+                ->with(
+                    'error',
+                    implode(' ', $validation->getErrors())
+                );
         }
 
         // Get submitted quantities.
@@ -134,7 +160,7 @@ class PublicMenu extends BaseController
             );
         }
 
-        // Get currently available menu items from the database.
+        // Get currently available menu items.
         $dailyMenuItemModel = new DailyMenuItemModel();
 
         $availableItems = $dailyMenuItemModel
@@ -142,6 +168,7 @@ class PublicMenu extends BaseController
             ->where('is_available', 1)
             ->findAll();
 
+        // Create an array for quick item lookup.
         $availableItemsById = [];
 
         foreach ($availableItems as $item) {
@@ -150,19 +177,47 @@ class PublicMenu extends BaseController
 
         // Prepare order items using database prices.
         $orderItems = [];
+
         $subtotal = 0;
 
         foreach ($quantities as $itemId => $quantity) {
 
-            if (! is_scalar($quantity) || ! is_numeric($quantity)) {
+            // Validate item ID.
+            if (
+                ! ctype_digit((string) $itemId) ||
+                ! isset($availableItemsById[$itemId])
+            ) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with(
+                        'error',
+                        'One of the selected items is no longer available. Please refresh the menu.'
+                    );
+            }
+
+            // Validate quantity.
+            if (! is_scalar($quantity)) {
                 return redirect()->back()
                     ->withInput()
                     ->with('error', 'Invalid item quantity.');
             }
 
+            $quantity = trim((string) $quantity);
+
+            // Allow whole numbers and up to two decimal places.
+            if (! preg_match('/^\d+(?:\.\d{1,2})?$/', $quantity)) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'Please enter a valid quantity.');
+            }
+
             $quantity = (float) $quantity;
 
-            if (! is_finite($quantity) || $quantity < 0 || $quantity > 999999) {
+            if (
+                ! is_finite($quantity) ||
+                $quantity < 0 ||
+                $quantity > 999999
+            ) {
                 return redirect()->back()
                     ->withInput()
                     ->with('error', 'Please enter a valid quantity.');
@@ -173,25 +228,22 @@ class PublicMenu extends BaseController
                 continue;
             }
 
-            // Make sure the item belongs to this menu and is available.
-            if (
-                ! ctype_digit((string) $itemId) ||
-                ! isset($availableItemsById[$itemId])
-            ) {
-                return redirect()->back()
-                    ->withInput()
-                    ->with('error', 'One of the selected items is no longer available. Please refresh the menu.');
-            }
-
             $menuItem = $availableItemsById[$itemId];
 
-            // Always use the price saved in the database.
+            // Always use the latest price saved in the database.
             $unitPrice = (float) $menuItem['price'];
+
+            if (! is_finite($unitPrice) || $unitPrice < 0) {
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'An item has an invalid price. Please contact the business.');
+            }
 
             $itemTotal = round($quantity * $unitPrice, 2);
 
             $subtotal += $itemTotal;
 
+            // Store an independent snapshot for the order.
             $orderItems[] = [
                 'product_id'   => $menuItem['product_id'],
                 'product_name' => $menuItem['product_name'],
@@ -205,7 +257,10 @@ class PublicMenu extends BaseController
         if (empty($orderItems)) {
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Please select at least one item with a quantity greater than zero.');
+                ->with(
+                    'error',
+                    'Please select at least one item with a quantity greater than zero.'
+                );
         }
 
         $subtotal = round($subtotal, 2);
@@ -216,37 +271,54 @@ class PublicMenu extends BaseController
         $grandTotal = $subtotal;
 
         // Prepare a unique order number.
-        $orderNumber = 'ORD-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
+        $orderNumber = 'ORD-' . date('YmdHis') . '-'
+            . strtoupper(bin2hex(random_bytes(3)));
 
-        // Prepare the WhatsApp message without prices or totals.
-        $message =
-            "Hello, I would like to place an order from " .
-            $business['business_name'] . ". My order: ";
-
-        $messageItems = [];
+        // Prepare the WhatsApp message.
+        // IMPORTANT: No prices or totals are included.
+        $message = "Hello! I would like to place an order from "
+            . $business['business_name']
+            . ".\n\nMy order:\n";
 
         foreach ($orderItems as $item) {
-            $messageItems[] = $item['product_name']
-                . " (" . $item['unit'] . ")"
-                . " x " . $item['quantity'];
+
+            $message .= '- '
+                . $item['product_name']
+                . ' (' . $item['unit'] . ')'
+                . ' x ' . $item['quantity']
+                . "\n";
         }
 
-        $message .= implode(', ', $messageItems);
-
-        // Remove non-digit characters from the business WhatsApp number.
+        // Clean the business WhatsApp number.
         $whatsappNumber = preg_replace(
             '/\D/',
             '',
-            $business['whatsapp_number']
+            (string) $business['whatsapp_number']
         );
 
-        if (empty($whatsappNumber)) {
-            return redirect()->back()
-                ->withInput()
-                ->with('error', 'The business WhatsApp number is not configured correctly.');
+        // Add India's country code if a 10-digit number was entered.
+        if (strlen($whatsappNumber) === 10) {
+            $whatsappNumber = '91' . $whatsappNumber;
+        } elseif (
+            strlen($whatsappNumber) === 11 &&
+            $whatsappNumber[0] === '0'
+        ) {
+            $whatsappNumber = '91' . substr($whatsappNumber, 1);
         }
 
-        // Start a database transaction.
+        if (
+            strlen($whatsappNumber) < 8 ||
+            strlen($whatsappNumber) > 15
+        ) {
+            return redirect()->back()
+                ->withInput()
+                ->with(
+                    'error',
+                    'The business WhatsApp number is not configured correctly.'
+                );
+        }
+
+        // Start the database transaction.
         $db = \Config\Database::connect();
 
         try {
@@ -257,29 +329,39 @@ class PublicMenu extends BaseController
             $orderModel = new OrderModel();
 
             $orderId = $orderModel->insert([
+
                 'business_id'         => $business['id'],
                 'customer_id'         => null,
                 'order_number'        => $orderNumber,
+
                 'customer_name'       => $customerName,
                 'customer_mobile'     => $customerMobile,
                 'customer_email'      => $customerEmail ?: null,
                 'delivery_address'    => $deliveryAddress,
+
                 'order_date'          => date('Y-m-d H:i:s'),
                 'delivery_date'       => null,
+
                 'subtotal'            => $subtotal,
                 'discount'            => $discount,
                 'delivery_charge'     => $deliveryCharge,
                 'grand_total'         => $grandTotal,
+
                 'amount_paid'         => 0,
                 'balance_amount'      => $grandTotal,
+
                 'order_status'        => 'pending',
                 'payment_status'      => 'pending',
+
                 'cancellation_reason' => null,
                 'seller_notes'        => null,
-            ]);
+
+            ], true);
 
             if (! $orderId) {
-                throw new \RuntimeException('Unable to save the order.');
+                throw new \RuntimeException(
+                    'Unable to save the order.'
+                );
             }
 
             // Save each item with its original name, unit and price.
@@ -290,7 +372,9 @@ class PublicMenu extends BaseController
                 $item['order_id'] = $orderId;
 
                 if (! $orderItemModel->insert($item)) {
-                    throw new \RuntimeException('Unable to save an order item.');
+                    throw new \RuntimeException(
+                        'Unable to save an order item.'
+                    );
                 }
             }
 
@@ -298,30 +382,43 @@ class PublicMenu extends BaseController
             $historyModel = new OrderStatusHistoryModel();
 
             if (! $historyModel->insert([
+
                 'order_id'   => $orderId,
                 'old_status' => null,
                 'new_status' => 'pending',
                 'remarks'    => 'Customer placed the order.',
                 'created_at' => date('Y-m-d H:i:s'),
+
             ])) {
-                throw new \RuntimeException('Unable to save order status history.');
+                throw new \RuntimeException(
+                    'Unable to save order status history.'
+                );
             }
 
-            // Check and commit the transaction.
+            // Check transaction status.
             if ($db->transStatus() === false) {
-                throw new \RuntimeException('Unable to complete the order.');
+                throw new \RuntimeException(
+                    'Unable to complete the order.'
+                );
             }
 
             $db->transCommit();
+
         } catch (\Throwable $e) {
 
             $db->transRollback();
 
-            log_message('error', 'Customer order error: ' . $e->getMessage());
+            log_message(
+                'error',
+                'Customer order error: ' . $e->getMessage()
+            );
 
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'We could not place your order. Please try again.');
+                ->with(
+                    'error',
+                    'We could not place your order. Please try again.'
+                );
         }
 
         // Open WhatsApp with the prepared message.

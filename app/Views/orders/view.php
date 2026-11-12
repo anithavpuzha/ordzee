@@ -5,6 +5,39 @@
 <?php
 $currentOrderStatus = strtolower($order['order_status'] ?? 'pending');
 $currentPaymentStatus = strtolower($order['payment_status'] ?? 'pending');
+$statusHistory = $statusHistory ?? [];
+
+$paymentAllowedStatuses = [
+    'accepted',
+    'preparing',
+    'ready',
+    'delivered',
+];
+
+$canRecordPayment = in_array(
+    $currentOrderStatus,
+    $paymentAllowedStatuses,
+    true
+);
+
+$canRecordRefund = in_array(
+    $currentOrderStatus,
+    $paymentAllowedStatuses,
+    true
+);
+
+$amountPaid = (float) ($order['amount_paid'] ?? 0);
+$balanceAmount = (float) ($order['balance_amount'] ?? 0);
+$grandTotal = (float) ($order['grand_total'] ?? 0);
+
+$payments = $payments ?? [];
+
+$paymentMethods = [
+    'cash'          => 'Cash',
+    'upi'           => 'UPI',
+    'bank_transfer' => 'Bank Transfer',
+    'other'         => 'Other',
+];
 
 // Order status badge
 $orderBadgeClass = 'bg-warning text-dark';
@@ -28,9 +61,21 @@ if ($currentPaymentStatus === 'paid') {
     $paymentBadgeClass = 'bg-secondary';
 }
 
-$itemCount = count($items);
+$itemCount = count($items ?? []);
 
-$currency = '₹';
+// Calculate payment and refund totals
+$totalPayments = 0;
+$totalRefunds = 0;
+
+foreach ($payments as $payment) {
+    $transactionType = $payment['transaction_type'] ?? '';
+
+    if ($transactionType === 'payment') {
+        $totalPayments += (float) ($payment['amount'] ?? 0);
+    } elseif ($transactionType === 'refund') {
+        $totalRefunds += (float) ($payment['amount'] ?? 0);
+    }
+}
 ?>
 
 <style>
@@ -128,7 +173,7 @@ $currency = '₹';
         font-size: 17px;
     }
 
-    /* Customer information cards */
+    /* Customer information and payment cards */
 
     .order-details-page .info-card {
         height: 100%;
@@ -156,7 +201,7 @@ $currency = '₹';
         background: #f8fafc;
     }
 
-    /* Ordered items table */
+    /* Tables */
 
     .order-details-page .items-table {
         margin-bottom: 0;
@@ -271,6 +316,49 @@ $currency = '₹';
             padding: 10px 9px;
         }
     }
+
+    /* Order Status Timeline */
+
+    .order-timeline {
+        position: relative;
+        padding-left: 8px;
+    }
+
+    .order-timeline-item {
+        position: relative;
+        display: flex;
+        gap: 15px;
+        padding-bottom: 25px;
+    }
+
+    .order-timeline-item:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 12px;
+        top: 27px;
+        bottom: 0;
+        width: 2px;
+        background: #e8edf3;
+    }
+
+    .order-timeline-marker {
+        position: relative;
+        z-index: 1;
+        width: 26px;
+        height: 26px;
+        min-width: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        font-size: 16px;
+    }
+
+    .order-timeline-content {
+        flex: 1;
+        min-width: 0;
+        padding-top: 3px;
+    }
 </style>
 
 <div class="panel order-details-page">
@@ -346,8 +434,6 @@ $currency = '₹';
 
     </div>
 
-
-
     <!-- Order Overview -->
     <div class="order-header">
 
@@ -386,9 +472,10 @@ $currency = '₹';
 
     </div>
 
-    <!-- Accept Order Modal -->
+    <!-- Accept and Reject Modals -->
     <?php if ($currentOrderStatus === 'pending'): ?>
 
+        <!-- Accept Order Modal -->
         <div class="modal fade" id="acceptOrderModal" tabindex="-1"
             aria-labelledby="acceptOrderModalLabel" aria-hidden="true">
 
@@ -428,11 +515,10 @@ $currency = '₹';
                                 class="form-control"
                                 rows="4"
                                 maxlength="2000"
-                                required
-                                placeholder="Example: Your order will be delivered today. Thank you for ordering with us!"></textarea>
+                                required><?= esc('Thank you for placing your order! We will keep you updated about your order.') ?></textarea>
 
                             <small class="text-muted">
-                                This message will be prepared for sending through WhatsApp.
+                                You can edit this prepared message or add your own message before continuing to WhatsApp.
                             </small>
 
                         </div>
@@ -457,7 +543,6 @@ $currency = '₹';
             </div>
 
         </div>
-
 
         <!-- Reject Order Modal -->
         <div class="modal fade" id="rejectOrderModal" tabindex="-1"
@@ -499,8 +584,11 @@ $currency = '₹';
                                 class="form-control"
                                 rows="4"
                                 maxlength="2000"
-                                required
-                                placeholder="Example: Sorry, the requested items are currently unavailable."></textarea>
+                                required><?= esc('We are sorry, but we are unable to fulfil your order at the moment. We apologise for the inconvenience.') ?></textarea>
+
+                            <small class="text-muted">
+                                You can edit this prepared message and add your own rejection reason before continuing to WhatsApp.
+                            </small>
 
                         </div>
 
@@ -528,6 +616,115 @@ $currency = '₹';
     <?php endif; ?>
 
 
+    <!-- Order Status History -->
+    <div class="detail-section">
+
+        <div class="detail-heading">
+            <i class="bi bi-clock-history"></i>
+            Order Status History
+        </div>
+
+        <?php if (! empty($statusHistory)): ?>
+
+            <div class="order-timeline">
+
+                <?php foreach ($statusHistory as $index => $history): ?>
+
+                    <?php
+                    $historyStatus = strtolower($history['new_status'] ?? '');
+
+                    $historyIcon = 'bi-circle';
+                    $historyColor = 'secondary';
+
+                    switch ($historyStatus) {
+                        case 'pending':
+                            $historyIcon = 'bi-cart-check';
+                            $historyColor = 'warning';
+                            break;
+
+                        case 'accepted':
+                            $historyIcon = 'bi-check-circle-fill';
+                            $historyColor = 'success';
+                            break;
+
+                        case 'preparing':
+                            $historyIcon = 'bi-hourglass-split';
+                            $historyColor = 'info';
+                            break;
+
+                        case 'ready':
+                            $historyIcon = 'bi-box-seam';
+                            $historyColor = 'primary';
+                            break;
+
+                        case 'delivered':
+                            $historyIcon = 'bi-truck';
+                            $historyColor = 'success';
+                            break;
+
+                        case 'rejected':
+                            $historyIcon = 'bi-x-circle-fill';
+                            $historyColor = 'danger';
+                            break;
+                    }
+                    ?>
+
+                    <div class="order-timeline-item">
+
+                        <div class="order-timeline-marker text-<?= $historyColor ?>">
+                            <i class="bi <?= $historyIcon ?>"></i>
+                        </div>
+
+                        <div class="order-timeline-content">
+
+                            <div class="d-flex justify-content-between
+                            align-items-start flex-wrap gap-2">
+
+                                <div class="fw-semibold">
+                                    <?php if ($historyStatus === 'pending'): ?>
+                                        Order Placed
+                                    <?php else: ?>
+                                        <?= esc(ucfirst($historyStatus)) ?>
+                                    <?php endif; ?>
+                                </div>
+
+                                <small class="text-muted">
+                                    <?= esc(date(
+                                        'd M Y, h:i A',
+                                        strtotime($history['created_at'])
+                                    )) ?>
+                                </small>
+
+                            </div>
+
+                            <?php if (! empty($history['remarks'])): ?>
+
+                                <div class="text-muted small mt-1">
+                                    <?= nl2br(esc($history['remarks'])) ?>
+                                </div>
+
+                            <?php endif; ?>
+
+                        </div>
+
+                    </div>
+
+                <?php endforeach; ?>
+
+            </div>
+
+        <?php else: ?>
+
+            <div class="text-muted small">
+                No order status history is available.
+            </div>
+
+        <?php endif; ?>
+
+    </div>
+
+
+
     <!-- Customer Information -->
     <div class="detail-section">
 
@@ -536,54 +733,60 @@ $currency = '₹';
             Customer Information
         </div>
 
-        <div class="row g-3">
+        <div class="row g-4">
 
-            <div class="col-md-6">
-                <div class="info-card">
+            <!-- Customer Name -->
+            <div class="col-md-4">
 
-                    <div class="info-label">Customer Name</div>
+                <div class="info-label">CUSTOMER NAME</div>
 
-                    <div class="info-value">
-                        <?= esc($order['customer_name']) ?>
-                    </div>
-
+                <div class="info-value">
+                    <?= esc($order['customer_name']) ?>
                 </div>
+
             </div>
 
-            <div class="col-md-6">
-                <div class="info-card">
+            <!-- Mobile Number -->
+            <div class="col-md-4">
 
-                    <div class="info-label">Mobile Number</div>
+                <div class="info-label">MOBILE NUMBER</div>
 
-                    <div class="info-value">
+                <div class="info-value">
+                    <i class="bi bi-telephone me-1 text-muted"></i>
+                    <a href="tel:<?= esc($order['customer_mobile'], 'attr') ?>"
+                        class="text-decoration-none text-reset">
                         <?= esc($order['customer_mobile']) ?>
-                    </div>
-
+                    </a>
                 </div>
+
             </div>
 
-            <div class="col-md-6">
-                <div class="info-card">
+            <!-- Email Address -->
+            <div class="col-md-4">
 
-                    <div class="info-label">Email Address</div>
+                <div class="info-label">EMAIL ADDRESS</div>
 
-                    <div class="info-value">
-                        <?= esc($order['customer_email'] ?: 'Not provided') ?>
-                    </div>
-
+                <div class="info-value">
+                    <i class="bi bi-envelope me-1 text-muted"></i>
+                    <?= esc($order['customer_email'] ?: 'Not provided') ?>
                 </div>
+
             </div>
 
-            <div class="col-md-6">
-                <div class="info-card address-card">
+            <!-- Delivery Address -->
+            <div class="col-12">
 
-                    <div class="info-label">Delivery Address</div>
+                <div class="pt-3 border-top">
 
-                    <div class="info-value">
+                    <div class="info-label mb-2">DELIVERY ADDRESS</div>
+
+                    <div class="info-value fw-normal">
+                        <i class="bi bi-geo-alt me-1 text-muted"></i>
                         <?= nl2br(esc($order['delivery_address'])) ?>
                     </div>
 
                 </div>
+
             </div>
 
         </div>
@@ -670,7 +873,6 @@ $currency = '₹';
 
     </div>
 
-
     <!-- Order Summary -->
     <div class="detail-section">
 
@@ -717,7 +919,7 @@ $currency = '₹';
                                 <th>Grand Total</th>
 
                                 <td>
-                                    ₹<?= number_format((float) $order['grand_total'], 2) ?>
+                                    ₹<?= number_format($grandTotal, 2) ?>
                                 </td>
                             </tr>
 
@@ -725,7 +927,7 @@ $currency = '₹';
                                 <th>Amount Paid</th>
 
                                 <td>
-                                    ₹<?= number_format((float) $order['amount_paid'], 2) ?>
+                                    ₹<?= number_format($amountPaid, 2) ?>
                                 </td>
                             </tr>
 
@@ -733,7 +935,7 @@ $currency = '₹';
                                 <th>Balance Amount</th>
 
                                 <td>
-                                    ₹<?= number_format((float) $order['balance_amount'], 2) ?>
+                                    ₹<?= number_format($balanceAmount, 2) ?>
                                 </td>
                             </tr>
 
@@ -744,6 +946,498 @@ $currency = '₹';
                 </div>
 
             </div>
+
+        </div>
+
+    </div>
+
+    <!-- Payment Management -->
+    <div class="detail-section">
+
+        <div class="detail-heading">
+            <i class="bi bi-wallet2"></i>
+            Payment Management
+        </div>
+
+        <!-- Payment Summary -->
+        <div class="row g-3 mb-4">
+
+            <div class="col-md-4">
+                <div class="info-card">
+                    <div class="info-label">Order Total</div>
+
+                    <div class="info-value fs-5">
+                        ₹<?= number_format($grandTotal, 2) ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="info-card">
+                    <div class="info-label">Net Amount Paid</div>
+
+                    <div class="info-value fs-5 text-success">
+                        ₹<?= number_format($amountPaid, 2) ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="info-card">
+                    <div class="info-label">Outstanding Balance</div>
+
+                    <div class="info-value fs-5 <?= $balanceAmount > 0 ? 'text-danger' : 'text-success' ?>">
+                        ₹<?= number_format($balanceAmount, 2) ?>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Payment Totals -->
+        <div class="row g-3 mb-4">
+
+            <div class="col-md-6">
+                <div class="info-card">
+                    <div class="info-label">Total Payments Recorded</div>
+
+                    <div class="info-value">
+                        ₹<?= number_format($totalPayments, 2) ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="info-card">
+                    <div class="info-label">Total Refunds Recorded</div>
+
+                    <div class="info-value">
+                        ₹<?= number_format($totalRefunds, 2) ?>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Payment Actions -->
+        <div class="d-flex flex-wrap gap-2 mb-4">
+
+            <?php if ($canRecordPayment && $balanceAmount > 0): ?>
+
+                <button type="button"
+                    class="btn btn-success"
+                    data-bs-toggle="modal"
+                    data-bs-target="#recordPaymentModal">
+
+                    <i class="bi bi-plus-circle me-1"></i>
+                    Record Payment
+
+                </button>
+
+            <?php endif; ?>
+
+            <?php if ($canRecordRefund && $amountPaid > 0): ?>
+
+                <button type="button"
+                    class="btn btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#recordRefundModal">
+
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>
+                    Record Refund
+
+                </button>
+
+            <?php endif; ?>
+
+            <?php if (! $canRecordPayment): ?>
+
+                <span class="text-muted small align-self-center">
+                    Payment actions are available after an order is accepted.
+                </span>
+
+            <?php endif; ?>
+
+        </div>
+
+        <!-- Record Payment Modal -->
+        <div class="modal fade" id="recordPaymentModal" tabindex="-1"
+            aria-labelledby="recordPaymentModalLabel" aria-hidden="true">
+
+            <div class="modal-dialog modal-dialog-centered">
+
+                <div class="modal-content">
+
+                    <form method="post"
+                        action="<?= site_url('orders/record-payment/' . $order['id']) ?>">
+
+                        <?= csrf_field() ?>
+
+                        <div class="modal-header">
+
+                            <h5 class="modal-title" id="recordPaymentModalLabel">
+                                Record Payment
+                            </h5>
+
+                            <button type="button" class="btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+
+                        </div>
+
+                        <div class="modal-body">
+
+                            <div class="alert alert-light border">
+                                Outstanding balance:
+
+                                <strong>
+                                    ₹<?= number_format($balanceAmount, 2) ?>
+                                </strong>
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Payment Amount *
+                                </label>
+
+                                <input type="number"
+                                    name="amount"
+                                    class="form-control"
+                                    min="0.01"
+                                    max="<?= esc(number_format($balanceAmount, 2, '.', '')) ?>"
+                                    step="0.01"
+                                    required
+                                    placeholder="Enter amount">
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Payment Method *
+                                </label>
+
+                                <select name="payment_method"
+                                    class="form-select" required>
+
+                                    <option value="">
+                                        Select payment method
+                                    </option>
+
+                                    <?php foreach ($paymentMethods as $value => $label): ?>
+
+                                        <option value="<?= esc($value) ?>">
+                                            <?= esc($label) ?>
+                                        </option>
+
+                                    <?php endforeach; ?>
+
+                                </select>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Payment Date *
+                                </label>
+
+                                <input type="datetime-local"
+                                    name="payment_date"
+                                    class="form-control"
+                                    value="<?= esc(date('Y-m-d\TH:i')) ?>"
+                                    required>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Reference Number
+                                </label>
+
+                                <input type="text"
+                                    name="reference_number"
+                                    class="form-control"
+                                    maxlength="150"
+                                    placeholder="Optional transaction ID">
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Notes
+                                </label>
+
+                                <textarea name="notes"
+                                    class="form-control"
+                                    rows="3"
+                                    maxlength="2000"
+                                    placeholder="Optional payment notes"></textarea>
+
+                            </div>
+
+                        </div>
+
+                        <div class="modal-footer">
+
+                            <button type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal">
+                                Cancel
+                            </button>
+
+                            <button type="submit" class="btn btn-success">
+                                Save Payment
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Record Refund Modal -->
+        <div class="modal fade" id="recordRefundModal" tabindex="-1"
+            aria-labelledby="recordRefundModalLabel" aria-hidden="true">
+
+            <div class="modal-dialog modal-dialog-centered">
+
+                <div class="modal-content">
+
+                    <form method="post"
+                        action="<?= site_url('orders/record-refund/' . $order['id']) ?>">
+
+                        <?= csrf_field() ?>
+
+                        <div class="modal-header">
+
+                            <h5 class="modal-title" id="recordRefundModalLabel">
+                                Record Refund
+                            </h5>
+
+                            <button type="button" class="btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+
+                        </div>
+
+                        <div class="modal-body">
+
+                            <div class="alert alert-light border">
+                                Maximum refundable amount:
+
+                                <strong>
+                                    ₹<?= number_format($amountPaid, 2) ?>
+                                </strong>
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Refund Amount *
+                                </label>
+
+                                <input type="number"
+                                    name="amount"
+                                    class="form-control"
+                                    min="0.01"
+                                    max="<?= esc(number_format($amountPaid, 2, '.', '')) ?>"
+                                    step="0.01"
+                                    required
+                                    placeholder="Enter refund amount">
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Refund Method *
+                                </label>
+
+                                <select name="payment_method"
+                                    class="form-select" required>
+
+                                    <option value="">
+                                        Select refund method
+                                    </option>
+
+                                    <?php foreach ($paymentMethods as $value => $label): ?>
+
+                                        <option value="<?= esc($value) ?>">
+                                            <?= esc($label) ?>
+                                        </option>
+
+                                    <?php endforeach; ?>
+
+                                </select>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Refund Date *
+                                </label>
+
+                                <input type="datetime-local"
+                                    name="payment_date"
+                                    class="form-control"
+                                    value="<?= esc(date('Y-m-d\TH:i')) ?>"
+                                    required>
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Reference Number
+                                </label>
+
+                                <input type="text"
+                                    name="reference_number"
+                                    class="form-control"
+                                    maxlength="150"
+                                    placeholder="Optional refund reference">
+
+                            </div>
+
+                            <div class="mb-3">
+
+                                <label class="form-label fw-semibold">
+                                    Refund Notes
+                                </label>
+
+                                <textarea name="notes"
+                                    class="form-control"
+                                    rows="3"
+                                    maxlength="2000"
+                                    placeholder="Reason for refund"></textarea>
+
+                            </div>
+
+                        </div>
+
+                        <div class="modal-footer">
+
+                            <button type="button"
+                                class="btn btn-secondary"
+                                data-bs-dismiss="modal">
+                                Cancel
+                            </button>
+
+                            <button type="submit" class="btn btn-danger">
+                                Save Refund
+                            </button>
+
+                        </div>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- Payment History -->
+        <div class="detail-heading mt-4">
+            <i class="bi bi-clock-history"></i>
+            Payment History
+        </div>
+
+        <div class="table-responsive">
+
+            <table class="table table-bordered items-table">
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Transaction</th>
+                        <th>Method</th>
+                        <th>Reference</th>
+                        <th>Notes</th>
+                        <th class="text-end">Amount</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    <?php if (! empty($payments)): ?>
+
+                        <?php foreach ($payments as $payment): ?>
+
+                            <?php
+                            $isRefund = ($payment['transaction_type'] ?? '') === 'refund';
+                            $method = $payment['payment_method'] ?? 'other';
+                            ?>
+
+                            <tr>
+
+                                <td class="text-nowrap">
+                                    <?= esc($payment['payment_date'] ?? '—') ?>
+                                </td>
+
+                                <td>
+
+                                    <?php if ($isRefund): ?>
+
+                                        <span class="badge bg-danger">
+                                            Refund
+                                        </span>
+
+                                    <?php else: ?>
+
+                                        <span class="badge bg-success">
+                                            Payment
+                                        </span>
+
+                                    <?php endif; ?>
+
+                                </td>
+
+                                <td>
+                                    <?= esc($paymentMethods[$method] ?? ucfirst($method)) ?>
+                                </td>
+
+                                <td>
+                                    <?= esc(($payment['reference_number'] ?? '') ?: '—') ?>
+                                </td>
+
+                                <td>
+                                    <?= esc(($payment['notes'] ?? '') ?: '—') ?>
+                                </td>
+
+                                <td class="text-end text-nowrap fw-semibold <?= $isRefund ? 'text-danger' : 'text-success' ?>">
+
+                                    <?= $isRefund ? '− ' : '+ ' ?>₹<?= number_format((float) ($payment['amount'] ?? 0), 2) ?>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                    <?php else: ?>
+
+                        <tr>
+                            <td colspan="6" class="empty-items">
+                                <i class="bi bi-wallet2 fs-4 d-block mb-2"></i>
+                                No payment transactions recorded yet.
+                            </td>
+                        </tr>
+
+                    <?php endif; ?>
+
+                </tbody>
+
+            </table>
 
         </div>
 

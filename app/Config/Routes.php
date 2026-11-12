@@ -40,6 +40,9 @@ $routes->group('orders', ['filter' => 'session'], static function ($routes) {
     $routes->post('accept/(:num)', 'Orders::accept/$1');
     $routes->post('reject/(:num)', 'Orders::reject/$1');
     $routes->post('deliver/(:num)', 'Orders::deliver/$1');
+
+    $routes->post('record-payment/(:num)', 'Orders::recordPayment/$1');
+    $routes->post('record-refund/(:num)', 'Orders::recordRefund/$1');
 });
 
 // Products routes
